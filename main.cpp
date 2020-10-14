@@ -21,7 +21,7 @@ int main()
 
     //bind the socket to an IP/Port
 
-    /* This creates a structure for the ipv4 info of the socket. */sockaddr_in hint;
+    /* This creates a structure for the ipv4 info of the socket. */sockaddr_in hint{};
     hint.sin_family = AF_INET; //set the family to ipv4
     hint.sin_port = htons(PORT); //set the port to the macro set above (use host-to-network-short to conver the int to the port)
     hint.sin_addr.s_addr = INADDR_ANY; //set the ip to any address
@@ -40,12 +40,11 @@ int main()
         return -1;
     }
 
-    //accept a call
-    sockaddr_in client; //same as `listening`, but for data of the client
+    sockaddr_in client{}; //same as `listening`, but for data of the client
 
     socklen_t clientSize = sizeof(client);
 
-    int clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
+    int clientSocket = accept(listening, (sockaddr*)&client, &clientSize); //accept function just grabs the first socket in the que, and accepts that
     if(clientSocket < 0) //attempt to accept from the client socket to the server socket (listening)
     {
         std::cerr << "Can't accept the client to the server!" << std::endl;
