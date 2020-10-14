@@ -1,0 +1,1 @@
+/usr/bin/c++.exe -g  -Wl,--enable-auto-import CMakeFiles/socket_fun.dir/main.cpp.o  -o socket_fun.exe -Wl,--out-implib,libsocket_fun.dll.a -Wl,--major-image-version,0,--minor-image-version,0 
