@@ -6,8 +6,10 @@
 #include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
 
 #define PORT 8080
+#define MAXCLIENTS 30
 
 int main()
 {
@@ -20,8 +22,7 @@ int main()
     }
 
     //bind the socket to an IP/Port
-
-    /* This creates a structure for the ipv4 info of the socket. */sockaddr_in hint{};
+    sockaddr_in hint{}; // This creates a structure for the ipv4 info of the socket.
     hint.sin_family = AF_INET; //set the family to ipv4
     hint.sin_port = htons(PORT); //set the port to the macro set above (use host-to-network-short to conver the int to the port)
     hint.sin_addr.s_addr = INADDR_ANY; //set the ip to any address
@@ -34,78 +35,108 @@ int main()
 
     //mark the socket for listening
 
-    if(listen(listening, SOMAXCONN) < 0 /*SOMAXCONN = maximum amount of connections, defined by sys/socket.h*/) //attempt to listen on the socket number indicated by `listening`
+    if(listen(listening, MAXCLIENTS) < 0 /*SOMAXCONN = maximum amount of connections, defined by sys/socket.h*/) //attempt to listen on the socket number indicated by `listening`
     {
         std::cerr << "Can't listen on the socket!" << std::endl;
         return -1;
     }
 
-    sockaddr_in client{}; //same as `listening`, but for data of the client
+    //FD_CLR() = Remove 1 from set
+    //FD_SET() = Add to set
+    //FD_ZERO() = Remove everything from set
+    //FD_ISSET() = Check if something is part of a set
 
-    socklen_t clientSize = sizeof(client);
+    fd_set master; //define the set
 
-    int clientSocket = accept(listening, (sockaddr*)&client, &clientSize); //accept function just grabs the first socket in the que, and accepts that
-    if(clientSocket < 0) //attempt to accept from the client socket to the server socket (listening)
+    int max_sd;
+    int client_socks[MAXCLIENTS];
+
+    while (true)
     {
-        std::cerr << "Can't accept the client to the server!" << std::endl;
-        return -1;
-    }
+        FD_ZERO(&master); //make sure it's cleared
 
-    //close the listening socket
+        FD_SET(listening, &master); //add the listening socket (server) to the set
 
-    close(listening); //close the server socket
+        max_sd = listening; //max socket descriptor set to the listening socket (need this for the select func)
 
-    //define stuff for getnameinfo
-    char host[NI_MAXHOST];
-    char service[NI_MAXSERV];
+        for (int i = 0; i < MAXCLIENTS; i++) {
 
-    memset(host, 0, sizeof(host)); //cleanup
-    memset(service, 0, sizeof(service)); //cleanup
-
-    int result = getnameinfo((sockaddr*)&client, // attmept to get info on the client
-                             sizeof(client),
-                             host,
-                             sizeof(host),
-                             service,
-                             sizeof(service),
-                             0);
-
-    if(result) //see if the getnameinfo was successful
-    {
-        std::cout << host << " connected on " << service << std::endl;
-    }
-    else
-    {
-        inet_ntop(AF_INET, &client.sin_addr, host, sizeof(host)); //ip->string
-        std::cout << host << " connected on " << ntohs(client.sin_port) /*converts ip to string*/ << std::endl;
-    }
-
-    //while receiving, display message
-
-    char buffer[4096];
-    while(true)
-    {
-        //clear buffer
-        memset(buffer, 0, sizeof(buffer));
-        //wait for a message
-        int bytesRecv = recv(clientSocket, buffer, sizeof(clientSocket), 0); //bytes recieved
-        if(bytesRecv < 0)
-        {
-            std::cerr << "There was a connection issue!" << std::endl;
-            break;
-        }
-        if(bytesRecv == 0)
-        {
-            std::cout << "The client has disconnected" << std::endl;
+            if (client_socks[i] > 0) //make sure the particular socket exists
+            {
+                FD_SET(client_socks[i], &master); //add it to the set
+            }
+            if (client_socks[i] > max_sd) //if the socket is greater than our current maximum socket descriptor
+            {
+                max_sd = client_socks[i];
+            }
         }
 
-        std::cout << "Received:" << std::string(buffer, 0, bytesRecv) << std::endl; //display message at server
+        //wait for some action on any socket within the master fd (this will set the master fd_set to be equal to whatever socket had some action on it)
+        int activity = select(max_sd + 1, &master, nullptr, nullptr, nullptr);
 
-        send(clientSocket, buffer, bytesRecv + 1, 0); //send message back
+        if (activity < 0) //error!
+        {
+            std::cerr << "Error while trying to select!" << std::endl;
+        }
+
+        int addrlen = sizeof(hint);
+
+        if (FD_ISSET(listening, &master)) //if the select got that there was action on the listening (server) socket - most likely, a client socket is trying to connect!
+        {
+            int client_socket;
+            client_socket = accept(listening, (sockaddr *) &hint, &addrlen); //accept the first client "waiting to get in"
+
+            if (client_socket < 0) {
+                std::cerr << "Something went wrong when trying to accept a client socket!" << std::endl;
+                break;
+            }
+
+            std::cout << "New connection: " << inet_ntoa(hint.sin_addr) << " on port " << ntohs(hint.sin_port) << std::endl;
+
+            if (send(client_socket, "Welcome to the socket party!", strlen("Welcome to the socket party!"), 0) != strlen("Welcome to the socket party!")) { //greetings!
+                std::cerr << "Error when sending welcome message." << std::endl; //something went wrong ;(
+            }
+
+            for (int i = 0; i < MAXCLIENTS; i++) //for each index, set client_sock to the address of the index of client_socks, so that we can set the value of it!
+            {
+                if(client_socks[i] == 0) //if this position is null (0)
+                {
+                    client_socks[i] = client_socket;
+
+                    break; //we're done with this for loop!
+                }
+            }
+        }
+
+        //else, there was action on a client socket (most likely a message is being sent!
+
+        char buffer[2048]; //we need somewhere to store clients messages!
+
+        for (int &client_sock : client_socks) //loop through the client sockets
+        {
+            if (FD_ISSET(client_sock, &master) == 0) //check if the select got action on the particular index in the client_socks array
+            {
+                memset(&buffer, 0, sizeof(buffer)); //make sure the buffer is clear!
+                if (read(client_sock, &buffer, 2048) == 0) //check if nothing was recieved from the client
+                {
+                    getpeername(client_sock, (sockaddr*)&hint, (socklen_t*)&addrlen) < 0; //gets networking info, based off of which socket is passed (the if statement checks for errors). In addition, it sets the values of hint to the info from the passed socket
+
+                    //print that the client disconnected
+                    std::cout << "A client has disconnected! IP: " << inet_ntoa(hint.sin_addr) << " Port: " << ntohs(hint.sin_port) << std::endl;
+
+                    close(client_sock); //close the socket
+                    client_sock = 0; //set its value in the array to 0, so that we can reuse it!
+                }
+
+                //else, we got message from the client
+                for (int &socket : client_socks)
+                    if (socket != client_sock)
+                        send(socket , buffer , strlen(buffer) , 0 );
+            }
+        }
+        return 0;
     }
-
-    //close socket
-    close(clientSocket);
-
-    return 0;
 }
+
+
+
