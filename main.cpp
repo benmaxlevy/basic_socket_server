@@ -47,14 +47,19 @@ int main()
 
     fd_set master; //define the set
 
-    int max_sd;
-    int client_socks[MAXCLIENTS]{};
+    //definitions
+    int max_sd, //max socket descriptor
+        activity, //result from select()
+        client_socks[MAXCLIENTS]{}, //array of client sockets
+        client_socket; //temp variable, so we can store the result from accept()
 
     while (true)
     {
-        FD_ZERO(&master); //make sure it's cleared
+        std::cout << "hello from top of while" << std::endl;
 
-        FD_SET(listening, &master); //add the listening socket (server) to the set
+        FD_ZERO(&master); //make sure it's cleared (give us a clean slate)
+
+        FD_SET(listening, &master); //add the listening socket (server) to the set (this always exists, as long as the program is running)
 
         max_sd = listening; //max socket descriptor set to the listening socket (need this for the select func)
 
@@ -70,20 +75,22 @@ int main()
             }
         }
 
-        //wait for some action on any socket within the master fd (this will set the master fd_set to be equal to whatever socket had some action on it)
-        int activity = select(max_sd + 1, &master, nullptr, nullptr, nullptr);
+        //wait for one or more of the socket descriptors to be ready for IO
+        activity = select( max_sd + 1 , &master , NULL , NULL , NULL);
 
+        //check if something went wrong
         if (activity < 0) //error!
         {
             std::cerr << "Error while trying to select!" << std::endl;
         }
 
+        //this stuff will occur once the select function returns something (we woke up!)
         int addrlen = sizeof(hint);
 
-        if (FD_ISSET(listening, &master)) //if the select got that there was action on the listening (server) socket - most likely, a client socket is trying to connect!
+        if (FD_ISSET(listening, &master)) //if the select got that the listening (server) socket had action occur on it
         {
-            int client_socket;
             client_socket = accept(listening, (sockaddr *) &hint, &addrlen); //accept the first client "waiting to get in"
+            std::cout << client_socket << std::endl;
 
             if (client_socket < 0) {
                 std::cerr << "Something went wrong when trying to accept a client socket!" << std::endl;
@@ -92,7 +99,7 @@ int main()
 
             std::cout << "New connection: " << inet_ntoa(hint.sin_addr) << " on port " << ntohs(hint.sin_port) << std::endl;
 
-            if (send(client_socket, "Welcome to the socket party!", strlen("Welcome to the socket party!"), 0) != strlen("Welcome to the socket party!")) { //greetings!
+            if (send(client_socket, "Welcome to the socket party!\n", strlen("Welcome to the socket party!\n"), 0) != strlen("Welcome to the socket party!\n")) { //greetings!
                 std::cerr << "Error when sending welcome message." << std::endl; //something went wrong ;(
             }
 
@@ -101,41 +108,50 @@ int main()
                 if(client_sock == 0) //if this position is null (0)
                 {
                     client_sock = client_socket;
+                    std::cout << "hello from within for loop setting client_sock to client_socket" << std::endl;
+                    break;
                 }
             }
         }
 
-        //else, there was action on a client socket (most likely a message is being sent!
-
-        char buffer[2048]; //we need somewhere to store clients messages!
-
-        for (int &client_sock : client_socks) //loop through the client sockets
+        else //else, there was action on a client socket (most likely a message is being sent!)
         {
-            if (client_sock != 0)
+            char buffer[2048]; //we need somewhere to store clients messages!
+
+            for (int &client_sock : client_socks) //loop through the client sockets
             {
-                if (FD_ISSET(client_sock, &master) == 0) //check if the select got action on the particular index in the client_socks array
+                if (client_sock != 0) //make sure we're actually going to run the stuff below on an actual socket!
                 {
-                    memset(&buffer, 0, sizeof(buffer)); //make sure the buffer is clear!
-                    if (read(client_sock, &buffer, 2048) == 0) //check if nothing was recieved from the client
+                    if (FD_ISSET(client_sock, &master)) //check if the select got action on the particular index in the client_socks array
                     {
-                        getpeername(client_sock, (sockaddr*)&hint, (socklen_t*)&addrlen) < 0; //gets networking info, based off of which socket is passed (the if statement checks for errors). In addition, it sets the values of hint to the info from the passed socket
+                        memset(&buffer, 0, sizeof(buffer)); //make sure the buffer is clear!
+                        if (read(client_sock, &buffer, 2048) == 0) //check if nothing was recieved from the client
+                        {
+                            getpeername(client_sock, (sockaddr*)&hint, (socklen_t*)&addrlen) < 0; //gets networking info, based off of which socket is passed (the if statement checks for errors). In addition, it sets the values of hint to the info from the passed socket
 
-                        //print that the client disconnected
-                        std::cout << "A client has disconnected! IP: " << inet_ntoa(hint.sin_addr) << " Port: " << ntohs(hint.sin_port) << std::endl;
+                            //print that the client disconnected
+                            std::cout << "A client has disconnected! IP: " << inet_ntoa(hint.sin_addr) << " Port: " << ntohs(hint.sin_port) << std::endl;
 
-                        close(client_sock); //close the socket
-                        client_sock = 0; //set its value in the array to 0, so that we can reuse it!
+                            close(client_sock); //close the socket
+                            client_sock = 0; //set its value in the array to 0, so that we can reuse it!
+                        }
+
+                        //else, we got message from the client
+                        for (int &socket : client_socks)
+                        {
+                            if (socket != client_sock)
+                            {
+                                send(socket , buffer, strlen(buffer), 0 );
+
+                            }
+                        }
                     }
-
-                    //else, we got message from the client
-                    for (int &socket : client_socks)
-                        //if (socket != client_sock)
-                        send(socket , buffer , strlen(buffer) , 0 );
                 }
             }
         }
-        return 0;
     }
+    return 0;
+
 }
 
 
