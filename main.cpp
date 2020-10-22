@@ -55,23 +55,21 @@ int main()
 
     while (true)
     {
-        std::cout << "hello from top of while" << std::endl;
-
         FD_ZERO(&master); //make sure it's cleared (give us a clean slate)
 
         FD_SET(listening, &master); //add the listening socket (server) to the set (this always exists, as long as the program is running)
 
         max_sd = listening; //max socket descriptor set to the listening socket (need this for the select func)
 
-        for (int i = 0; i < MAXCLIENTS; i++) {
+        for (int &client_sock : client_socks) {
 
-            if (client_socks[i] > 0) //make sure the particular socket exists
+            if (client_sock > 0) //make sure the particular socket exists
             {
-                FD_SET(client_socks[i], &master); //add it to the set
+                FD_SET(client_sock, &master); //add it to the set
             }
-            if (client_socks[i] > max_sd) //if the socket is greater than our current maximum socket descriptor
+            if (client_sock > max_sd) //if the socket is greater than our current maximum socket descriptor
             {
-                max_sd = client_socks[i];
+                max_sd = client_sock;
             }
         }
 
@@ -107,8 +105,7 @@ int main()
             {
                 if(client_sock == 0) //if this position is null (0)
                 {
-                    client_sock = client_socket;
-                    std::cout << "hello from within for loop setting client_sock to client_socket" << std::endl;
+                    client_sock = client_socket; //add the new client_socket to the array of client socks
                     break;
                 }
             }
