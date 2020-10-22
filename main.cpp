@@ -1,5 +1,4 @@
 #include <iostream>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -49,7 +48,7 @@ int main()
     fd_set master; //define the set
 
     int max_sd;
-    int client_socks[MAXCLIENTS];
+    int client_socks[MAXCLIENTS]{};
 
     while (true)
     {
@@ -97,13 +96,11 @@ int main()
                 std::cerr << "Error when sending welcome message." << std::endl; //something went wrong ;(
             }
 
-            for (int i = 0; i < MAXCLIENTS; i++) //for each index, set client_sock to the address of the index of client_socks, so that we can set the value of it!
+            for (int &client_sock : client_socks) //for each index, set client_sock to the address of the index of client_socks, so that we can set the value of it!
             {
-                if(client_socks[i] == 0) //if this position is null (0)
+                if(client_sock == 0) //if this position is null (0)
                 {
-                    client_socks[i] = client_socket;
-
-                    break; //we're done with this for loop!
+                    client_sock = client_socket;
                 }
             }
         }
@@ -114,29 +111,31 @@ int main()
 
         for (int &client_sock : client_socks) //loop through the client sockets
         {
-            if (FD_ISSET(client_sock, &master) == 0) //check if the select got action on the particular index in the client_socks array
+            if (client_sock != 0)
             {
-                memset(&buffer, 0, sizeof(buffer)); //make sure the buffer is clear!
-                if (read(client_sock, &buffer, 2048) == 0) //check if nothing was recieved from the client
+                if (FD_ISSET(client_sock, &master) == 0) //check if the select got action on the particular index in the client_socks array
                 {
-                    getpeername(client_sock, (sockaddr*)&hint, (socklen_t*)&addrlen) < 0; //gets networking info, based off of which socket is passed (the if statement checks for errors). In addition, it sets the values of hint to the info from the passed socket
+                    memset(&buffer, 0, sizeof(buffer)); //make sure the buffer is clear!
+                    if (read(client_sock, &buffer, 2048) == 0) //check if nothing was recieved from the client
+                    {
+                        getpeername(client_sock, (sockaddr*)&hint, (socklen_t*)&addrlen) < 0; //gets networking info, based off of which socket is passed (the if statement checks for errors). In addition, it sets the values of hint to the info from the passed socket
 
-                    //print that the client disconnected
-                    std::cout << "A client has disconnected! IP: " << inet_ntoa(hint.sin_addr) << " Port: " << ntohs(hint.sin_port) << std::endl;
+                        //print that the client disconnected
+                        std::cout << "A client has disconnected! IP: " << inet_ntoa(hint.sin_addr) << " Port: " << ntohs(hint.sin_port) << std::endl;
 
-                    close(client_sock); //close the socket
-                    client_sock = 0; //set its value in the array to 0, so that we can reuse it!
-                }
+                        close(client_sock); //close the socket
+                        client_sock = 0; //set its value in the array to 0, so that we can reuse it!
+                    }
 
-                //else, we got message from the client
-                for (int &socket : client_socks)
-                    if (socket != client_sock)
+                    //else, we got message from the client
+                    for (int &socket : client_socks)
+                        //if (socket != client_sock)
                         send(socket , buffer , strlen(buffer) , 0 );
+                }
             }
         }
         return 0;
     }
 }
-
 
 
