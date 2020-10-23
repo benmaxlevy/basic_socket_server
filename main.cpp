@@ -6,12 +6,36 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
+#include <string>
 
 #define PORT 8080
 #define MAXCLIENTS 30
 
-int main()
+int main(int argc, char** argv)
 {
+    int version; //store if we're doing http or basic tcp (0 - basic, 1 - http)
+
+    //let's see what args we got passed!
+    if(argc > 0)
+    {
+        for(int i = 1; i < argc; i++) //loop through argv
+        {
+            if(argv[i] == std::string("--http")) //see if the pointer to a char within the argv array is equal to --http (needs to be of type string, so not comparing pointer to pointer)
+            {
+                version = 1;
+                break;
+            }
+            else if(argv[i] == std::string("--basic")) //same as previous, just --basic
+            {
+                version = 0;
+                break;
+            }
+            //else, they gave a bad flag
+            std::cerr << "Invalid flag. Options: --http (for http), --basic (for basic TCP)" << std::endl;
+            return -1;
+        }
+    }
+
     //create a socket
     int listening = socket(AF_INET, SOCK_STREAM, 0); //(returns int) - makes socket (returns what socket it is in terms of an int)
     if(listening < 0) //check if we were able to make a socket!
