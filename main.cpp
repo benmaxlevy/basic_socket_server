@@ -1,5 +1,7 @@
 #include <iostream>
 #include <sys/types.h>
+
+//socket includes
 #include <sys/socket.h>
 #include <netdb.h>
 #include <cstring>
@@ -7,12 +9,26 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 
+//custom .h includes
+#include "args_check/check.h"
+
 #define PORT 8080
 #define MAXCLIENTS 30
 
 int main(int argc, char** argv)
 {
     int version; //store if we're doing http or basic tcp (0 - basic, 1 - http)
+
+    char** to_check = (char**)calloc(2, sizeof(char*));
+
+    to_check[0] = (char*)"--http";
+    to_check[1] = (char*)"--basic";
+
+    if(check(argc, argv, to_check, &version) < 0) //get what is requested by user(http or basic socket)
+    {
+        std::cerr << "Can't check args!" << std::endl;
+        return -1;
+    }
 
 
     //create a socket
